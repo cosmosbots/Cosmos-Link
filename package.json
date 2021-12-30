@@ -1,0 +1,15 @@
+{
+  "name": "cosmoswebhost",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js dev",
+    "start": "node index.js"
+  },
+  "author": "Cosmos Softwares",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}

@@ -18,17 +18,18 @@ wsServer = new WebSocketServer({
 });
 
 async function cosmosAccountsServerTokenVerify(token) {
-  var state = Math.floor(Math.random() * 999999999).toString()
+  // Generate a state: long random integer
+  const state = Math.floor(Math.random() * 999999999).toString()
 
-  return fetch("https://account.cosmos-softwares.com/token/verify/" + token + "/" + state)
-  .then(r => r.text())
-  .then(d => {
-    if (d == "TokenValid+" + state) {
-      return true;
-    } else {
-      return false;
-    }
-  })
+  // Verify the provided token
+  const res = await fetch("https://account.cosmos-softwares.com/token/verify/" + token + "/" + state);
+  const data = await res.text();
+  
+  // Check if the token is valid
+  if (data === "TokenValid+" + state) 
+    return true;
+  else 
+    return false;
 }
 
 function originIsAllowed(origin) {
@@ -121,10 +122,11 @@ wsServer.on('request', function(request) {
                           }
                           serverMap[json.headers.authorization][clientID] = {};
                           serverMap[json.headers.authorization][clientID] = serverData;
+                          serverMap[json.headers.authorization][clientID]['connection'] = connection;
                         } else {
                           sendMsg({"error": true, "code": "InvalidServernickname"})
                         }
-                      } else if (clientType = "client") {
+                      } else if (clientType == "client") {
                         var clientData = {
                           "clientID": clientID,
                           "type": "client",
@@ -145,7 +147,40 @@ wsServer.on('request', function(request) {
                 });
                 sendMsg({"error": false, "code": "AwaitVerification"})
               } else if (json.body == "GetAccountServerDirectory" && clientID != null && accToken != null && clientType == "client") {
-                sendMsg({"error": false, "code": "RetrievedServerList", "list": serverMap[accToken]});
+                sendMsg({"error": false, "code": "RetrievedServerList", "list": serverMap[accToken]});  
+              } else if (json.body == "RequestServerConnection" && clientID != null && accToken != null && clientType == "client" && json.headers.serverID && json.headers.authorization) {
+                try {
+                  if (connClients[json.headers.serverID]) {
+                    console.log(`Client ${clientID} is requesting a server connection to server ${json.headers.serverID}`);
+                    var accVerify = false;
+                    if (connClients[clientID].internalLinkData.accountID == serverMap[connClients[clientID].internalLinkData.accountID][json.headers.serverID].internalLinkData.accountID) {
+                      accVerify = true;
+                    }
+                    var now = new Date;
+                    var utcTimestamp = Date.UTC(now.getUTCFullYear(),now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds());
+                    var serverMessage = JSON.stringify(
+                      {
+                        "error": false,
+                        "code": "ClientConnectAttempt",
+                        "data": {
+                          "remote": {
+                            "clientID": clientID,
+                            "verified": accVerify,
+                            "requestServerID": json.headers.serverID
+                          }
+                        },
+                        "timestamp": utcTimestamp,
+                        "tmz": "UTC"
+                      }
+                    )
+                    serverMap[connClients[clientID].internalLinkData.accountID][json.headers.serverID].connection.sendUTF(JSON.stringify(serverMessage));
+                  } else {
+                    sendMsg({"error": true, "code": "ServerNotFound"});
+                  }
+                } catch (e) {
+                  console.error(e.stack)
+                  sendMsg({"error": true, "code": "ServerNotFound"});
+                }
               } else {
                 sendMsg({"error": true, "code": "InvalidRequest"});
               }
